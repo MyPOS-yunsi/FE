@@ -3,7 +3,7 @@
 import { usePosStore } from '@/store/posStore';
 import { orderApi } from '@/lib/api';
 import { Banknote, QrCode, LogOut, Settings } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatVnd } from '@/lib/utils';
 import BankTransferWaiting from './BankTransferWaiting';
@@ -24,7 +24,18 @@ export default function CheckoutPanel() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+
+  // Dùng state lưu mã ngẫu nhiên và thời gian để fix lỗi Hydration Mismatch
+  const [receiptCode, setReceiptCode] = useState('');
+  const [receiptTime, setReceiptTime] = useState('');
+
   const router = useRouter();
+
+  useEffect(() => {
+    // Chỉ khởi tạo trên client
+    setReceiptCode(`ORD-${Math.floor(Math.random() * 10000)}`);
+    setReceiptTime(new Date().toLocaleString('vi-VN'));
+  }, [cart]); // Mỗi khi giỏ hàng đổi, update lại phiếu
 
   const handleLogout = () => {
     document.cookie = 'token=; Max-Age=0; path=/';
@@ -185,7 +196,7 @@ export default function CheckoutPanel() {
       {/* Printable Receipt Area */}
       <div className="hidden receipt-print bg-white p-2 text-black text-center">
         <h2 className="text-xl font-bold mb-2">MY POS STORE</h2>
-        <p className="text-xs mb-4">Mã ĐH: ORD-{Math.floor(Math.random() * 10000)}<br />{new Date().toLocaleString('vi-VN')}</p>
+        <p className="text-xs mb-4">Mã ĐH: {receiptCode}<br />{receiptTime}</p>
         <hr className="border-dashed border-black my-2" />
         <div className="text-left w-full">
           {cart.map(item => (
