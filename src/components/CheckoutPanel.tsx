@@ -9,7 +9,7 @@ import { formatVnd } from '@/lib/utils';
 import BankTransferWaiting from './BankTransferWaiting';
 
 // Cấu hình tài khoản ngân hàng – lấy từ env hoặc config
-const BANK_BIN = process.env.NEXT_PUBLIC_BANK_BIN ?? '970436'; // VCB mặc định
+const BANK_NAME = process.env.NEXT_PUBLIC_BANK_NAME ?? 'BIDV'; 
 const ACCOUNT_NUMBER = process.env.NEXT_PUBLIC_BANK_ACCOUNT ?? '';
 
 interface PendingOrder {
@@ -101,7 +101,7 @@ export default function CheckoutPanel() {
         txnRef={pendingOrder.txnRef}
         totalAmount={pendingOrder.totalAmount}
         accountNumber={ACCOUNT_NUMBER}
-        bankBin={BANK_BIN}
+        bankName={BANK_NAME}
         onSuccess={handleTransferSuccess}
         onCancel={() => setPendingOrder(null)}
       />

@@ -12,14 +12,14 @@ interface Props {
   txnRef: string;
   totalAmount: number;
   accountNumber: string; // Số tài khoản ngân hàng
-  bankBin: string; // BIN ngân hàng (SePay VietcomBank = 970436)
+  bankName: string;      // Tên ngân hàng theo SePay (vd: "BIDV", "Vietcombank")
   onSuccess: () => void;
   onCancel: () => void;
 }
 
 /**
  * Màn hình chờ chuyển khoản:
- *  - Hiển thị QR VietQR gắn TxnRef vào nội dung
+ *  - Hiển thị QR qua qr.sepay.vn (hỗ trợ VA cho BIDV)
  *  - Polling /api/orders/{id}/status mỗi 3s
  *  - Khi paymentStatus = "Success" → gọi onSuccess
  */
@@ -29,7 +29,7 @@ export default function BankTransferWaiting({
   txnRef,
   totalAmount,
   accountNumber,
-  bankBin,
+  bankName,
   onSuccess,
   onCancel,
 }: Props) {
@@ -39,8 +39,8 @@ export default function BankTransferWaiting({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const TIMEOUT_SECONDS = 300; // 5 phút timeout
 
-  // VietQR URL: https://img.vietqr.io/image/{bankBin}-{accountNumber}-{template}.png?amount={amount}&addInfo={txnRef}
-  const qrUrl = `https://img.vietqr.io/image/${bankBin}-${accountNumber}-compact2.png?amount=${Math.round(totalAmount)}&addInfo=${encodeURIComponent(txnRef)}&accountName=MY+POS+STORE`;
+  // Dùng qr.sepay.vn – hỗ trợ VA (tài khoản ảo) với BIDV và các ngân hàng khác
+  const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${encodeURIComponent(bankName)}&amount=${Math.round(totalAmount)}&des=${encodeURIComponent(txnRef)}&template=compact`;
 
   useEffect(() => {
     // Đếm thời gian chờ
