@@ -16,3 +16,21 @@ body {
   overflow: hidden; /* Avoid dual scrolling on app */
   background-color: #f8fafc;
 }
+
+@media print {
+  /* Ẩn toàn bộ giao diện */
+  body * { visibility: hidden; }
+  /* Chỉ hiện phần bill */
+  .receipt-print, .receipt-print * { visibility: visible; }
+  .receipt-print {
+    position: fixed;
+    inset: 0;
+    width: 80mm; /* Khổ bill nhiệt tiêu chuẩn */
+    margin: 0 auto;
+    padding: 8px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    background: white;
+  }
+}
+

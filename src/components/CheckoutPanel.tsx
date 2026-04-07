@@ -4,12 +4,13 @@ import { usePosStore } from '@/store/posStore';
 import { orderApi } from '@/lib/api';
 import { Banknote, QrCode, LogOut, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { formatVnd } from '@/lib/utils';
 import BankTransferWaiting from './BankTransferWaiting';
 
 // Cấu hình tài khoản ngân hàng – lấy từ env hoặc config
-const BANK_NAME = process.env.NEXT_PUBLIC_BANK_NAME ?? 'BIDV'; 
+const BANK_NAME = process.env.NEXT_PUBLIC_BANK_NAME ?? 'BIDV';
 const ACCOUNT_NUMBER = process.env.NEXT_PUBLIC_BANK_ACCOUNT ?? '';
 
 interface PendingOrder {
@@ -24,18 +25,18 @@ export default function CheckoutPanel() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
-
-  // Dùng state lưu mã ngẫu nhiên và thời gian để fix lỗi Hydration Mismatch
-  const [receiptCode, setReceiptCode] = useState('');
-  const [receiptTime, setReceiptTime] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<{
+    orderNumber: string;
+    printedAt: string;
+    subTotal: number;
+    discount: number;
+    total: number;
+    paymentMethod: string;
+    lines: { productName: string; variantParams: string; quantity: number; price: number }[];
+  } | null>(null);
 
   const router = useRouter();
-
-  useEffect(() => {
-    // Chỉ khởi tạo trên client
-    setReceiptCode(`ORD-${Math.floor(Math.random() * 10000)}`);
-    setReceiptTime(new Date().toLocaleString('vi-VN'));
-  }, [cart]); // Mỗi khi giỏ hàng đổi, update lại phiếu
 
   const handleLogout = () => {
     document.cookie = 'token=; Max-Age=0; path=/';
@@ -67,7 +68,6 @@ export default function CheckoutPanel() {
       });
 
       if (paymentMethod === 'transfer' && result.txnRef) {
-        // Chuyển sang màn hình chờ chuyển khoản
         setPendingOrder({
           orderId: result.orderId,
           orderNumber: result.orderNumber,
@@ -75,9 +75,19 @@ export default function CheckoutPanel() {
           totalAmount: result.totalAmount,
         });
       } else {
-        // Tiền mặt: in bill ngay
-        window.print();
+        // Tiền mặt: lưu receipt, clear giỏ và hiện modal
+        const receipt = {
+          orderNumber: result.orderNumber,
+          printedAt: new Date().toLocaleString('vi-VN'),
+          subTotal,
+          discount,
+          total,
+          paymentMethod: 'Tiền mặt',
+          lines: cart.map(item => ({ productName: item.productName, variantParams: item.variantParams, quantity: item.quantity, price: item.price })),
+        };
+        setLastReceipt(receipt);
         clearCart();
+        setShowSuccessModal(true);
       }
     } catch (e: any) {
       setError(e.message ?? 'Lỗi khi tạo đơn');
@@ -87,9 +97,22 @@ export default function CheckoutPanel() {
   };
 
   const handleTransferSuccess = () => {
-    window.print();
-    clearCart();
-    setPendingOrder(null);
+    // Chuyển khoản thành công: lưu receipt và hiện modal
+    if (pendingOrder) {
+      const receipt = {
+        orderNumber: pendingOrder.orderNumber,
+        printedAt: new Date().toLocaleString('vi-VN'),
+        subTotal,
+        discount,
+        total: pendingOrder.totalAmount,
+        paymentMethod: 'Chuyển khoản',
+        lines: cart.map(item => ({ productName: item.productName, variantParams: item.variantParams, quantity: item.quantity, price: item.price })),
+      };
+      setLastReceipt(receipt);
+      clearCart();
+      setPendingOrder(null);
+      setShowSuccessModal(true);
+    }
   };
 
   // Màn hình chờ chuyển khoản (full-screen overlay)
@@ -107,6 +130,68 @@ export default function CheckoutPanel() {
       />
     );
   }
+
+  const buildReceiptHtml = () => {
+    if (!lastReceipt) return '';
+    const lines = lastReceipt.lines.map(item => `
+      <div style="margin-bottom:6px">
+        <div style="font-weight:bold;word-break:break-word">${item.productName}</div>
+        ${item.variantParams ? `<div style="font-size:11px;font-style:italic">(${item.variantParams})</div>` : ''}
+        <table style="width:100%;border-collapse:collapse"><tbody><tr>
+          <td>${item.quantity} x ${formatVnd(item.price)}</td>
+          <td style="text-align:right">${formatVnd(item.quantity * item.price)}</td>
+        </tr></tbody></table>
+      </div>`).join('');
+    const discount = lastReceipt.discount > 0
+      ? `<tr><td>Giảm giá:</td><td style="text-align:right">-${formatVnd(lastReceipt.discount)}</td></tr>` : '';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HoaDon_${lastReceipt.orderNumber}</title>
+      <style>
+        @page { size: 80mm auto; margin: 4mm; }
+        body { font-family: 'Courier New', monospace; font-size: 12px; color: #000; margin: 0; padding: 0; width: 72mm; }
+      </style></head><body>
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:16px;font-weight:bold">MY POS STORE</div>
+        <div style="font-size:11px">Mã ĐH: ${lastReceipt.orderNumber}</div>
+        <div style="font-size:11px">${lastReceipt.printedAt}</div>
+      </div>
+      <div style="border-top:1px dashed #000;margin:5px 0"></div>
+      ${lines}
+      <div style="border-top:1px dashed #000;margin:5px 0"></div>
+      <table style="width:100%;border-collapse:collapse"><tbody>
+        <tr><td>Tạm tính:</td><td style="text-align:right">${formatVnd(lastReceipt.subTotal)}</td></tr>
+        ${discount}
+        <tr style="font-weight:bold;font-size:14px">
+          <td style="padding-top:3px">TỔNG CỘNG:</td>
+          <td style="text-align:right;padding-top:3px">${formatVnd(lastReceipt.total)}</td>
+        </tr>
+      </tbody></table>
+      <div style="font-size:11px;margin-top:4px">Thanh toán: ${lastReceipt.paymentMethod}</div>
+      <div style="border-top:1px dashed #000;margin:5px 0"></div>
+      <div style="text-align:center;font-size:11px">Cảm ơn quý khách và hẹn gặp lại!</div>
+    </body></html>`;
+  };
+
+  const handlePrint = () => {
+    const html = buildReceiptHtml();
+    const win = window.open('', '_blank', 'width=400,height=700');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.print(); };
+  };
+
+  const handleDownloadPdf = () => {
+    // Mở tab mới chỉ có nội dung hóa đơn, trình duyệt tự xử lý Save as PDF
+    const html = buildReceiptHtml();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 w-full md:w-1/4 lg:w-3/12 shadow-md z-10">
@@ -193,30 +278,78 @@ export default function CheckoutPanel() {
         </button>
       </div>
 
-      {/* Printable Receipt Area */}
-      <div className="hidden receipt-print bg-white p-2 text-black text-center">
-        <h2 className="text-xl font-bold mb-2">MY POS STORE</h2>
-        <p className="text-xs mb-4">Mã ĐH: {receiptCode}<br />{receiptTime}</p>
-        <hr className="border-dashed border-black my-2" />
-        <div className="text-left w-full">
-          {cart.map(item => (
-            <div key={item.variantId} className="mb-2">
-              <div className="break-words font-semibold">{item.productName}</div>
-              <div className="break-words text-[10px] mb-1 italic">({item.variantParams})</div>
-              <div className="flex justify-between">
-                <span>{item.quantity} x {formatVnd(item.price)}</span>
-                <span>{formatVnd(item.quantity * item.price)}</span>
+      {showSuccessModal && lastReceipt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col z-20">
+            <div className="bg-emerald-500 p-6 text-center text-white">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur">
+                <Banknote className="w-8 h-8" />
               </div>
+              <h2 className="text-2xl font-bold">Thanh Toán Xong!</h2>
+              <p className="opacity-90">{lastReceipt.orderNumber}</p>
             </div>
-          ))}
+            <div className="p-6 flex flex-col gap-3">
+              <button
+                onClick={handlePrint}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-lg transition-colors"
+              >
+                In Hóa Đơn
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                className="w-full py-3 border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-50 rounded-xl font-bold text-lg transition-colors"
+              >
+                Tải File PDF
+              </button>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setLastReceipt(null);
+                }}
+                className="w-full py-3 mt-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
         </div>
-        <hr className="border-dashed border-black my-2" />
-        <div className="flex justify-between font-bold text-sm">
-          <span>TỔNG CỘNG:</span>
-          <span>{formatVnd(total)}</span>
-        </div>
-        <p className="mt-6 text-xs text-center">Cảm ơn quý khách và hẹn gặp lại!</p>
-      </div>
+      )}
+
+      {/* Bill ẩn trong DOM chỉ dùng cho @media print (nút In Hóa Đơn) */}
+      {lastReceipt && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: 9998 }}>
+          <div id="receipt-print-content" className="receipt-print"
+            style={{ width: '80mm', background: 'white', padding: '4mm', fontFamily: '"Courier New", monospace', fontSize: '12px', color: '#000', boxSizing: 'border-box' }}>
+            <div style={{ textAlign: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 16, fontWeight: 'bold' }}>MY POS STORE</div>
+              <div style={{ fontSize: 11 }}>Mã ĐH: {lastReceipt.orderNumber}</div>
+              <div style={{ fontSize: 11 }}>{lastReceipt.printedAt}</div>
+            </div>
+            <div style={{ borderTop: '1px dashed #000', margin: '5px 0' }} />
+            {lastReceipt.lines.map((item, i) => (
+              <div key={i} style={{ marginBottom: 6 }}>
+                <div style={{ fontWeight: 'bold', wordBreak: 'break-word' }}>{item.productName}</div>
+                {item.variantParams && <div style={{ fontSize: 11, fontStyle: 'italic' }}>({item.variantParams})</div>}
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
+                  <td>{item.quantity} x {formatVnd(item.price)}</td>
+                  <td style={{ textAlign: 'right' }}>{formatVnd(item.quantity * item.price)}</td>
+                </tr></tbody></table>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px dashed #000', margin: '5px 0' }} />
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
+              <tr><td>Tạm tính:</td><td style={{ textAlign: 'right' }}>{formatVnd(lastReceipt.subTotal)}</td></tr>
+              {lastReceipt.discount > 0 && <tr><td>Giảm giá:</td><td style={{ textAlign: 'right' }}>-{formatVnd(lastReceipt.discount)}</td></tr>}
+              <tr style={{ fontWeight: 'bold', fontSize: 14 }}><td>TỔNG CỘNG:</td><td style={{ textAlign: 'right' }}>{formatVnd(lastReceipt.total)}</td></tr>
+            </tbody></table>
+            <div style={{ fontSize: 11, marginTop: 4 }}>Thanh toán: {lastReceipt.paymentMethod}</div>
+            <div style={{ borderTop: '1px dashed #000', margin: '5px 0' }} />
+            <div style={{ textAlign: 'center', fontSize: 11 }}>Cảm ơn quý khách và hẹn gặp lại!</div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+
