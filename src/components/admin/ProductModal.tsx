@@ -25,6 +25,14 @@ type VariantRow = {
 
 // Helpers
 
+// Sort keys trước khi stringify để tránh mismatch do thứ tự key khác nhau
+// VD: JSON.stringify({B:2,A:1}) !== JSON.stringify({A:1,B:2})
+function makeKey(combo: Record<string, string>): string {
+  return JSON.stringify(
+    Object.keys(combo).sort().reduce((acc, k) => { acc[k] = combo[k]; return acc; }, {} as Record<string, string>)
+  );
+}
+
 function cartesian(attrs: AttributeInput[]): Record<string, string>[] {
   const filled = attrs.filter(a => a.name.trim() && a.values.some(v => v.trim()));
   if (!filled.length) return [{}];
@@ -79,7 +87,7 @@ export function ProductModal({
         // Seed overrides từ variant hiện tại để hiển thị đúng giá/tồn kho
         const initOverrides: Record<string, Partial<VariantRow>> = {};
         d.variants.forEach(v => {
-          const key = JSON.stringify(v.attributes);
+          const key = makeKey(v.attributes);
           initOverrides[key] = {
             sku: v.sku,
             barcode: v.barcode ?? '',
@@ -116,7 +124,7 @@ export function ProductModal({
   const generatedVariants = useMemo<VariantRow[]>(() => {
     const skuPrefix = code.trim() || 'CODE';
     return cartesian(attrs).map(combo => {
-      const key = JSON.stringify(combo);
+      const key = makeKey(combo);
       return {
         attributes: combo,
         sku: buildSku(skuPrefix, combo),
@@ -140,7 +148,7 @@ export function ProductModal({
     if (bulkStock !== '') patch.initialStock = +bulkStock;
     const next: Record<string, Partial<VariantRow>> = {};
     generatedVariants.forEach(v => {
-      const key = JSON.stringify(v.attributes);
+      const key = makeKey(v.attributes);
       next[key] = { ...variantOverrides[key], ...patch };
     });
     setVariantOverrides(next);
@@ -169,7 +177,7 @@ export function ProductModal({
     if (bulkStock !== '') patch.initialStock = +bulkStock;
     const next: Record<string, Partial<VariantRow>> = {};
     (isEdit && detail ? detail.variants : generatedVariants).forEach(v => {
-      const key = JSON.stringify(v.attributes);
+      const key = makeKey(v.attributes);
       next[key] = { ...variantOverrides[key], ...patch };
     });
     setVariantOverrides(next);
@@ -410,7 +418,7 @@ export function ProductModal({
                   </thead>
                   <tbody>
                     {generatedVariants.map((v, idx) => {
-                      const key = JSON.stringify(v.attributes);
+                      const key = makeKey(v.attributes);
                       return (
                         <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
                           {attrs.filter(a => a.name.trim()).map(a => (
