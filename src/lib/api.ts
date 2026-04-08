@@ -186,6 +186,39 @@ export type CheckoutRequestDto = {
   lines: { productVariantId: number; quantity: number; overridePrice?: number }[];
 };
 
+export type OrderSummaryDto = {
+  id: number;
+  orderNumber: string;
+  totalAmount: number;
+  subTotal: number;
+  discountAmount: number;
+  status: string;
+  createdAt: string;
+  paymentMethod: string;
+  paymentStatus: string;
+};
+
+export type OrderInvoiceDto = {
+  id: number;
+  orderNumber: string;
+  totalAmount: number;
+  subTotal: number;
+  discountAmount: number;
+  status: string;
+  createdAt: string;
+  orderLines: {
+    productVariantId: number;
+    quantity: number;
+    unitPrice: number;
+    productVariant?: {
+      sku: string;
+      product?: { name: string };
+      attributes?: Record<string, string>;
+    };
+  }[];
+  payments: { paymentMethod: string; status: string }[];
+};
+
 export const orderApi = {
   checkout: (dto: CheckoutRequestDto) =>
     request<{ orderId: number; orderNumber: string; txnRef?: string; totalAmount: number; status: string }>('/api/orders/checkout', {
@@ -197,10 +230,9 @@ export const orderApi = {
   getStatus: (orderId: number) =>
     request<{ orderId: number; status: string; paymentStatus: string; orderNumber: string; totalAmount: number }>(`/api/orders/${orderId}/status`),
 
-  list: () => request<any[]>('/api/orders'),
+  list: () => request<OrderSummaryDto[]>('/api/orders'),
 
-  getInvoice: (orderId: number) =>
-    request<any>(`/api/orders/${orderId}/invoice`),
+  getInvoice: (orderId: number) => request<OrderInvoiceDto>(`/api/orders/${orderId}/invoice`),
 };
 
 // Shifts

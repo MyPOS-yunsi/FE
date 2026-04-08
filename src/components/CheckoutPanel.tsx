@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { formatVnd } from '@/lib/utils';
 import BankTransferWaiting from './BankTransferWaiting';
+import { buildReceiptHtml, openReceiptWindow, downloadReceiptAsHtml } from '@/lib/receipt';
 
 // Cấu hình tài khoản ngân hàng – lấy từ env hoặc config
 const BANK_NAME = process.env.NEXT_PUBLIC_BANK_NAME ?? 'BIDV';
@@ -131,66 +132,27 @@ export default function CheckoutPanel() {
     );
   }
 
-  const buildReceiptHtml = () => {
-    if (!lastReceipt) return '';
-    const lines = lastReceipt.lines.map(item => `
-      <div style="margin-bottom:6px">
-        <div style="font-weight:bold;word-break:break-word">${item.productName}</div>
-        ${item.variantParams ? `<div style="font-size:11px;font-style:italic">(${item.variantParams})</div>` : ''}
-        <table style="width:100%;border-collapse:collapse"><tbody><tr>
-          <td>${item.quantity} x ${formatVnd(item.price)}</td>
-          <td style="text-align:right">${formatVnd(item.quantity * item.price)}</td>
-        </tr></tbody></table>
-      </div>`).join('');
-    const discount = lastReceipt.discount > 0
-      ? `<tr><td>Giảm giá:</td><td style="text-align:right">-${formatVnd(lastReceipt.discount)}</td></tr>` : '';
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HoaDon_${lastReceipt.orderNumber}</title>
-      <style>
-        @page { size: 80mm auto; margin: 4mm; }
-        body { font-family: 'Courier New', monospace; font-size: 12px; color: #000; margin: 0; padding: 0; width: 72mm; }
-      </style></head><body>
-      <div style="text-align:center;margin-bottom:6px">
-        <div style="font-size:16px;font-weight:bold">MY POS STORE</div>
-        <div style="font-size:11px">Mã ĐH: ${lastReceipt.orderNumber}</div>
-        <div style="font-size:11px">${lastReceipt.printedAt}</div>
-      </div>
-      <div style="border-top:1px dashed #000;margin:5px 0"></div>
-      ${lines}
-      <div style="border-top:1px dashed #000;margin:5px 0"></div>
-      <table style="width:100%;border-collapse:collapse"><tbody>
-        <tr><td>Tạm tính:</td><td style="text-align:right">${formatVnd(lastReceipt.subTotal)}</td></tr>
-        ${discount}
-        <tr style="font-weight:bold;font-size:14px">
-          <td style="padding-top:3px">TỔNG CỘNG:</td>
-          <td style="text-align:right;padding-top:3px">${formatVnd(lastReceipt.total)}</td>
-        </tr>
-      </tbody></table>
-      <div style="font-size:11px;margin-top:4px">Thanh toán: ${lastReceipt.paymentMethod}</div>
-      <div style="border-top:1px dashed #000;margin:5px 0"></div>
-      <div style="text-align:center;font-size:11px">Cảm ơn quý khách và hẹn gặp lại!</div>
-    </body></html>`;
+  const getReceiptData = () => {
+    if (!lastReceipt) return null;
+    return {
+      orderNumber: lastReceipt.orderNumber,
+      printedAt: lastReceipt.printedAt,
+      subTotal: lastReceipt.subTotal,
+      discount: lastReceipt.discount,
+      total: lastReceipt.total,
+      paymentMethod: lastReceipt.paymentMethod,
+      lines: lastReceipt.lines,
+    };
   };
 
   const handlePrint = () => {
-    const html = buildReceiptHtml();
-    const win = window.open('', '_blank', 'width=400,height=700');
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.onload = () => { win.print(); };
+    const data = getReceiptData(); if (!data) return;
+    openReceiptWindow(buildReceiptHtml(data));
   };
 
   const handleDownloadPdf = () => {
-    // Mở tab mới chỉ có nội dung hóa đơn, trình duyệt tự xử lý Save as PDF
-    const html = buildReceiptHtml();
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.click();
-    URL.revokeObjectURL(url);
+    const data = getReceiptData(); if (!data) return;
+    downloadReceiptAsHtml(buildReceiptHtml(data));
   };
 
   return (
