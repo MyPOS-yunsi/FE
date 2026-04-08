@@ -233,6 +233,30 @@ export const orderApi = {
   list: () => request<OrderSummaryDto[]>('/api/orders'),
 
   getInvoice: (orderId: number) => request<OrderInvoiceDto>(`/api/orders/${orderId}/invoice`),
+
+  getFinance: (year?: number, month?: number) => {
+    const now = new Date();
+    const y = year ?? now.getFullYear();
+    const m = month ?? (now.getMonth() + 1);
+    return request<FinanceSummaryDto>(`/api/orders/finance?year=${y}&month=${m}`);
+  },
+};
+
+export type FinanceTransactionDto = {
+  orderNumber: string;
+  transactionReference?: string;
+  createdAt: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  amount: number;
+};
+
+export type FinanceSummaryDto = {
+  totalRevenue: number;
+  totalCash: number;
+  totalBankTransfer: number;
+  totalOrders: number;
+  transactions: FinanceTransactionDto[];
 };
 
 // Shifts
